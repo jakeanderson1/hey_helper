@@ -472,7 +472,22 @@ def kubegetlatesttag():
     latest_tag = "v" + ".".join([str(i) for i in split_tags[0]])
     print(latest_tag)
     return latest_tag
-    
+
+@command
+def buildpackage():
+    '''Build the python package for distribution'''
+    build_wheel_command = ['python', 'setup.py', 'sdist', 'bdist_wheel']
+    _run_command(build_wheel_command)
+
+@command
+def uninstallpackage():
+    uninstall_package_command = ['pip', 'uninstall', '-y', 'hey-helper']
+    _run_command(uninstall_package_command)
+
+@command
+def installpackage():
+    install_package_command = ['pip', 'install', os.path.realpath('./dist/hey_helper-0.0.1-py3-none-any.whl')]
+    _run_command(install_package_command)
 
 def welcome():
     print(r'''
