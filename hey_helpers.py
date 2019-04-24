@@ -2,12 +2,20 @@ import sys, os
 import subprocess
 import functools
 import getpass
+from io import open
+from yaml import load, dump
+try:
+    from yaml import CLoader as Loader, CDumper as Dumper
+except ImportError:
+    from yaml import Loader, Dumper
 from time import sleep
 
-COMMANDS = {
-}
+COMMANDS = {}
 
-NONINTERACTIVE = {
+NONINTERACTIVE = {}
+
+CONFIG = {
+    'default_container': 'django'
 }
 
 def command(_func=None, *, command_name=None, noninteractive=False):
@@ -47,16 +55,30 @@ def _handle_err(cmd):
         sys.exit(1)
     return cmd
 
+def _get_config_file_here(filepath):
+    valid_filenames = ['hey.yml', 'hey.yaml']
+    filename = next((f for f in os.listdir(filepath) if f in valid_filenames), None)
+    return filename
+
 def _go_to_working_dir():
     this_dir = os.path.dirname(os.path.realpath(__file__))
     current_dir = os.path.realpath(os.curdir)
-    git_root = '.git' in os.listdir(current_dir)
-    while not git_root:
+    config_root = _get_config_file_here(current_dir)
+    while not config_root:
+        previous_dir = current_dir
         current_dir = os.path.join(current_dir, os.path.pardir)
-        git_root = '.git' in os.listdir(current_dir)
-    if git_root:
+        if os.path.realpath(previous_dir) == os.path.realpath(current_dir):
+            # Shockingly there isn't a better way to figure out if we're at root?
+            break
+        config_root = _get_config_file_here(current_dir)
+    if config_root:
         os.chdir(current_dir)
-        print("wk_dir(git root): ", current_dir)
+        print("wk_dir(config root): ", current_dir)
+
+        with open(os.path.join(current_dir, config_root), 'r') as stream:
+            loaded_config = load(stream, Loader=Loader)
+            CONFIG.update(loaded_config)
+            print(CONFIG)
         return current_dir
 
     wk_dir = os.path.join(this_dir, os.path.pardir)
@@ -64,9 +86,9 @@ def _go_to_working_dir():
     print("wk_dir: ", wk_dir)
     return wk_dir
 
-def _docker_compose(command_array, compose_files=None, handle_errors=True):
-    _go_to_working_dir()
+_go_to_working_dir()
 
+def _docker_compose(command_array, compose_files=None, handle_errors=True):
     if not compose_files:
         compose_files = os.getenv('COMPOSE_FILES', 'docker-compose.DEV.yml')
         if ';' in compose_files:
@@ -109,15 +131,14 @@ def _run_command(command_array, *args, **kwargs):
 def bash():
     '''Get a bash prompt inside the web container'''
     print('Getting you into bash inside the web container...')
-	# TODO make container configurable
-    _docker_compose(['exec', 'web', 'bash'])
+    _docker_compose(['exec', CONFIG.get('default_container', 'django'), 'bash'])
 
 
 @command
 def shell():
     '''Open a python shell inside the web container'''
     print('Opening a python shell inside the web container...')
-    _docker_compose(['exec', 'web', 'bash', '-c', 'python /code/django/manage.py shell'])
+    _docker_compose(['exec', CONFIG.get('default_container', 'django'), 'bash', '-c', 'python /code/django/manage.py shell'])
 
 
 @command
@@ -127,22 +148,22 @@ def test():
     args = ''
     if len(sys.argv) > 2:
         args = ' '.join(sys.argv[2:])
-    print(['exec', 'web', 'bash', '-c', 'cd /code/django; pytest {}'.format(args)])
-    _docker_compose(['exec', 'web', 'bash', '-c',
+    print(['exec', CONFIG.get('default_container', 'django'), 'bash', '-c', 'cd /code/django; pytest {}'.format(args)])
+    _docker_compose(['exec', CONFIG.get('default_container', 'django'), 'bash', '-c',
                                   'cd /code/django; pytest {}'.format(args)])
 
 @command
 def mail():
     '''Run a local SMTP debug server that prints outgoing email'''
     print("Listening for mail at localhost:2525...")
-    _docker_compose(['exec', 'web', 'bash', '-c',
+    _docker_compose(['exec', CONFIG.get('default_container', 'django'), 'bash', '-c',
                      'python -m smtpd -n -c DebuggingServer localhost:2525'])
 
 @command
 def logs():
     '''Most recent container log lines (default: last 10 of django)'''
     print('Showing logs. HINT: you can add `--tail <num>` and/or a container name...')
-    args = ['--tail', '10', 'web']
+    args = ['--tail', '10', CONFIG.get('default_container', 'django')]
     if len(sys.argv) > 2:
         args = sys.argv[2:]
     _docker_compose(['logs'] + args)
@@ -156,12 +177,12 @@ def dc():
 def sstop():
     '''Stop all supervisor jobs'''
     print('Stopping supervisor...')
-    _docker_compose(['exec', 'web', 'bash', '-c', 'supervisorctl -u admin -p @rg0n18 stop all'])
+    _docker_compose(['exec', CONFIG.get('default_container', 'django'), 'bash', '-c', 'supervisorctl -u admin -p @rg0n18 stop all'])
 
 def sstart():
     '''Start all supervisor jobs'''
     print('Starting supervisor...')
-    _docker_compose(['exec', 'web', 'bash', '-c', 'supervisorctl -u admin -p @rg0n18 start all'])
+    _docker_compose(['exec', CONFIG.get('default_container', 'django'), 'bash', '-c', 'supervisorctl -u admin -p @rg0n18 start all'])
 
 @command
 def up():
@@ -275,7 +296,7 @@ def mkmigrations():
     args = ''
     if len(sys.argv) > 2:
         args = ' '.join(sys.argv[2:])
-    _docker_compose(['exec', 'web', 'bash', '-c',
+    _docker_compose(['exec', CONFIG.get('default_container', 'django'), 'bash', '-c',
                      'python /code/django/manage.py makemigrations {}'.format(args)])
 
 
@@ -286,7 +307,7 @@ def migrate():
     args = ''
     if len(sys.argv) > 2:
         args = ' '.join(sys.argv[2:])
-    _docker_compose(['exec', 'web', 'bash', '-c',
+    _docker_compose(['exec', CONFIG.get('default_container', 'django'), 'bash', '-c',
                      'python /code/django/manage.py migrate {}'.format(args)])
 
 def jsbuild():
@@ -294,17 +315,17 @@ def jsbuild():
     args = ''
     if len(sys.argv) > 2:
         args = ' '.join(sys.argv[2:])
-    _docker_compose(['exec', 'web', 'bash', '-c',
+    _docker_compose(['exec', CONFIG.get('default_container', 'django'), 'bash', '-c',
                      'cd /code/django/js; npm run build {}'.format(args)])
 
 def jsserve():
     '''Run the webpack dev server'''
-    _docker_compose(['exec', 'web', 'bash', '-c', 'cd /code/django/js; npm run serve'])
+    _docker_compose(['exec', CONFIG.get('default_container', 'django'), 'bash', '-c', 'cd /code/django/js; npm run serve'])
 
 def npm():
     '''Run arbitrary npm commands in the container'''
     if len(sys.argv) > 2:
-        _docker_compose(['exec', 'web', 'bash', '-c',
+        _docker_compose(['exec', CONFIG.get('default_container', 'django'), 'bash', '-c',
                          'cd /code/django/js; npm {}'.format(' '.join(sys.argv[2:]))])
 
 def collectstatic():
