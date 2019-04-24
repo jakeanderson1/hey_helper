@@ -129,15 +129,15 @@ def _run_command(command_array, *args, **kwargs):
 
 @command
 def bash():
-    '''Get a bash prompt inside the web container'''
-    print('Getting you into bash inside the web container...')
+    '''Get a bash prompt inside the default container'''
+    print('Getting you into bash inside the {} container...'.format(CONFIG.get('default_container', 'django')))
     _docker_compose(['exec', CONFIG.get('default_container', 'django'), 'bash'])
 
 
 @command
 def shell():
-    '''Open a python shell inside the web container'''
-    print('Opening a python shell inside the web container...')
+    '''Open a python shell inside the default container'''
+    print('Opening a python shell inside the {} container...'.format(CONFIG.get('default_container', 'django')))
     _docker_compose(['exec', CONFIG.get('default_container', 'django'), 'bash', '-c', 'python /code/django/manage.py shell'])
 
 
