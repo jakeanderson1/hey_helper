@@ -14,6 +14,7 @@ setuptools.setup(
     long_description_content_type='text/markdown',
     url='https://github.com/jakeanderson1/hey_helper',
     packages=['hey_helpers'],
+    install_requires=['pyyaml'],
     classifiers=[
         "Programming Language :: Python :: 3",
         "License :: OSI Approved :: MIT License",
