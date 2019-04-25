@@ -4,7 +4,7 @@ import functools
 import getpass
 from io import open
 from yaml import load
-from yaml import CLoader as Loader
+from yaml import Loader
 from time import sleep
 
 COMMANDS = {}
