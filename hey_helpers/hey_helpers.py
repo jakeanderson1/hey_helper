@@ -74,7 +74,8 @@ def _go_to_working_dir():
 
         with open(os.path.join(current_dir, config_root), 'r') as stream:
             loaded_config = load(stream, Loader=Loader)
-            CONFIG.update(loaded_config)
+            if loaded_config:
+                CONFIG.update(loaded_config)
             # print(CONFIG)
         return current_dir
 
@@ -511,12 +512,15 @@ def welcome():
     while not choice or choice.lower() != 'q' and not _command_match(choice):
         choice = input("\nType a number, a command, or `q` to quit: ")
 
+all_commands = dict(COMMANDS)
+all_commands.update(NONINTERACTIVE)
 
-if __name__ == '__main__':
-    all_commands = dict(COMMANDS)
-    all_commands.update(NONINTERACTIVE)
+def entrypoint():
 
     if len(sys.argv) < 2:
         welcome()
     else:
         _command_match(sys.argv[1])
+
+if __name__ == '__main__':
+    entrypoint()
