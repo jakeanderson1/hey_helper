@@ -3,11 +3,8 @@ import subprocess
 import functools
 import getpass
 from io import open
-from yaml import load, dump
-try:
-    from yaml import CLoader as Loader, CDumper as Dumper
-except ImportError:
-    from yaml import Loader, Dumper
+from yaml import load
+from yaml import CLoader as Loader
 from time import sleep
 
 COMMANDS = {}
@@ -78,7 +75,7 @@ def _go_to_working_dir():
         with open(os.path.join(current_dir, config_root), 'r') as stream:
             loaded_config = load(stream, Loader=Loader)
             CONFIG.update(loaded_config)
-            print(CONFIG)
+            # print(CONFIG)
         return current_dir
 
     wk_dir = os.path.join(this_dir, os.path.pardir)
