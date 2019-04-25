@@ -4,7 +4,7 @@ import functools
 import getpass
 from io import open
 from yaml import load
-from yaml import CLoader as Loader
+from yaml import Loader
 from time import sleep
 
 COMMANDS = {}
@@ -74,7 +74,8 @@ def _go_to_working_dir():
 
         with open(os.path.join(current_dir, config_root), 'r') as stream:
             loaded_config = load(stream, Loader=Loader)
-            CONFIG.update(loaded_config)
+            if loaded_config:
+                CONFIG.update(loaded_config)
             # print(CONFIG)
         return current_dir
 
@@ -472,7 +473,22 @@ def kubegetlatesttag():
     latest_tag = "v" + ".".join([str(i) for i in split_tags[0]])
     print(latest_tag)
     return latest_tag
-    
+
+@command
+def buildpackage():
+    '''Build the python package for distribution'''
+    build_wheel_command = ['python', 'setup.py', 'sdist', 'bdist_wheel']
+    _run_command(build_wheel_command)
+
+@command
+def uninstallpackage():
+    uninstall_package_command = ['pip', 'uninstall', '-y', 'hey-helper']
+    _run_command(uninstall_package_command)
+
+@command
+def installpackage():
+    install_package_command = ['pip', 'install', os.path.realpath('./dist/hey_helper-0.0.1-py3-none-any.whl')]
+    _run_command(install_package_command)
 
 def welcome():
     print(r'''
@@ -496,12 +512,15 @@ def welcome():
     while not choice or choice.lower() != 'q' and not _command_match(choice):
         choice = input("\nType a number, a command, or `q` to quit: ")
 
+all_commands = dict(COMMANDS)
+all_commands.update(NONINTERACTIVE)
 
-if __name__ == '__main__':
-    all_commands = dict(COMMANDS)
-    all_commands.update(NONINTERACTIVE)
+def entrypoint():
 
     if len(sys.argv) < 2:
         welcome()
     else:
         _command_match(sys.argv[1])
+
+if __name__ == '__main__':
+    entrypoint()
