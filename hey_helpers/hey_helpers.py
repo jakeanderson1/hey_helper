@@ -382,20 +382,33 @@ def build():
     '''Build docker images'''
     copyclientsecret()
     # TODO determine names based on configuration or directory context
-    habitdb_www_build_command = ['docker', 'build', '-t', 'gcr.io/habitdb/habitdb-www:v2.25', '.']
+    tag = _kubegetnexttag('gcr.io/habitdb/habitdb-www')
+    habitdb_www_build_command = ['docker', 'build', '-t', tag, '.']
     _run_command(habitdb_www_build_command)
-    kanbanflow_sync_build_command = ['docker', 'build', '-t', 'gcr.io/habitdb/kanbanflow_sync:v0.3.4', 'kanbanflow_sync']
+    tag = _kubegetnexttag('gcr.io/habitdb/kanbanflow_sync')
+    kanbanflow_sync_build_command = ['docker', 'build', '-t', tag, 'kanbanflow_sync']
     return _run_command(kanbanflow_sync_build_command)
+
+def _pushtogke(image_name):
+    tag = _kubegetnexttag(image_name)
+    push_command = ['docker', 'push', tag]
+    _run_command(push_command)
+    prodtag = '{}:prod'.format(image_name)
+    tag_command = ['docker', 'tag', tag, prodtag]
+    _run_command(tag_command)
+    push_prod_command = ['docker', 'push', prodtag]
+    _run_command(push_prod_command)
 
 @command
 def pushtogke():
     '''Push docker images to google kubernetes cloud'''
     # TODO only run prerequisites if they aren't met
     build()
-    push_habitdb_command = ['gcloud', 'docker', '--', 'push', 'gcr.io/habitdb/habitdb-www:v2.25']
-    _run_command(push_habitdb_command)
-    push_kanbanflow_command = ['gcloud', 'docker', '--', 'push', 'gcr.io/habitdb/kanbanflow_sync:v0.3.4']
-    _run_command(push_kanbanflow_command)
+    image_name = 'gcr.io/habitdb/habitdb-www'
+    _pushtogke(image_name)
+    
+    image_name = 'gcr.io/habitdb/kanbanflow_sync'
+    _pushtogke(image_name)
 
 @command
 def applygkeconfig():
@@ -453,6 +466,29 @@ def kubegettags():
     list_tags_command = ['gcloud', 'container', 'images', 'list-tags', image_name]
     _run_command(list_tags_command)
 
+def _kubegetlatesttagarray(image_name):
+    list_tags_command = ['gcloud', 'container', 'images', 'list-tags', image_name, '--limit=1', '--format=value(tags[])']
+    result = _run_command(list_tags_command, stdout=subprocess.PIPE)
+    latesttags = result.stdout.decode("utf-8", errors='ignore').replace("'", "").split(';')
+    split_tags = []
+    for tag in latesttags:
+        tag_values = [int(i) for i in tag.replace('v', '').split('.') if i.isdigit()]
+        split_tags.append(tag_values)
+    split_tags = list(sorted(split_tags, reverse=True))
+    return split_tags[0]
+
+def _kubegetlatesttag(image_name):
+    tag_array = _kubegetlatesttagarray(image_name)
+    latest_tag = "v" + ".".join([str(i) for i in tag_array])
+    # print(latest_tag)
+    return latest_tag
+
+def _kubegetnexttag(image_name):
+    tag_array = _kubegetlatesttagarray(image_name)
+    tag_array[-1] += 1
+    next_tag = "v" + ".".join([str(i) for i in tag_array])
+    return "{}:{}".format(image_name, next_tag)
+
 @command
 def kubegetlatesttag():
     '''Get the latest tag for a given image'''
@@ -462,17 +498,7 @@ def kubegetlatesttag():
     
     args = sys.argv[2:]
     image_name = args[0]
-    list_tags_command = ['gcloud', 'container', 'images', 'list-tags', image_name, '--limit=1', '--format=value(tags[])']
-    result = _run_command(list_tags_command, stdout=subprocess.PIPE)
-    latesttags = result.stdout.decode("utf-8", errors='ignore').replace("'", "").split(';')
-    split_tags = []
-    for tag in latesttags:
-        tag_values = [int(i) for i in tag.replace('v', '').split('.')]
-        split_tags.append(tag_values)
-    split_tags = list(sorted(split_tags, reverse=True))
-    latest_tag = "v" + ".".join([str(i) for i in split_tags[0]])
-    print(latest_tag)
-    return latest_tag
+    _kubegetlatesttag(image_name)
 
 @command
 def buildpackage():
