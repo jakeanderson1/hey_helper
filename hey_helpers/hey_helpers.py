@@ -12,7 +12,8 @@ COMMANDS = {}
 NONINTERACTIVE = {}
 
 CONFIG = {
-    'default_container': 'django'
+    'default_container': 'django',
+    'compose_files': ['docker-compose.DEV.yml']
 }
 
 def command(_func=None, *, command_name=None, noninteractive=False):
@@ -88,11 +89,12 @@ _go_to_working_dir()
 
 def _docker_compose(command_array, compose_files=None, handle_errors=True):
     if not compose_files:
-        compose_files = os.getenv('COMPOSE_FILES', 'docker-compose.DEV.yml')
-        if ';' in compose_files:
-            compose_files = compose_files.split(';')
-        else:
-            compose_files = [compose_files]
+        compose_files = CONFIG.get('compose_files', ['docker-compose.DEV.yml'])
+        if type(compose_files) is not list:
+            if ';' in compose_files:
+                compose_files = compose_files.split(';')
+            else:
+                compose_files = [compose_files]
 
     command = ['docker-compose']
     for cf in compose_files:
@@ -246,12 +248,12 @@ def restore():
 
     this_dir = os.path.dirname(os.path.realpath(__file__))
     # wk_dir = os.path.join(this_dir, os.path.pardir)
-    wk_dir = "c:\\src\\atc\\"
+    wk_dir = _go_to_working_dir()
     if not dump:
         dump = os.path.basename(sys.argv[2])
 
     print("Restoring data in container to wk_dir {}...".format(wk_dir))
-    _handle_err(subprocess.run(['docker', 'run', '--mount',
+    _handle_err(_run_command(['docker', 'run', '--mount',
         'type=bind,src={},destination=/pg_restore_src'.format(wk_dir), '--mount',
         'type=volume,src=data,destination=/pg_restore_dest', 'ubuntu', 'bash', '-c',
             "cd /pg_restore_dest; \
@@ -308,6 +310,7 @@ def migrate():
     _docker_compose(['exec', CONFIG.get('default_container', 'django'), 'bash', '-c',
                      'python /code/django/manage.py migrate {}'.format(args)])
 
+@command
 def jsbuild():
     '''Run a webpack build'''
     args = ''
@@ -316,10 +319,12 @@ def jsbuild():
     _docker_compose(['exec', CONFIG.get('default_container', 'django'), 'bash', '-c',
                      'cd /code/django/js; npm run build {}'.format(args)])
 
+@command
 def jsserve():
     '''Run the webpack dev server'''
     _docker_compose(['exec', CONFIG.get('default_container', 'django'), 'bash', '-c', 'cd /code/django/js; npm run serve'])
 
+@command
 def npm():
     '''Run arbitrary npm commands in the container'''
     if len(sys.argv) > 2:
