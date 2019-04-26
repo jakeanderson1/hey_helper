@@ -6,7 +6,7 @@ with open("README.md", "r") as fh:
 
 setuptools.setup(
     name='hey-helper',
-    version='0.0.1',
+    version='0.0.2',
     author='John Rork',
     author_email='jnrork@gmail.com',
     description='A python wrapper for bash-like scripts',
