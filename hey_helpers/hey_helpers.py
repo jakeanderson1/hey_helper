@@ -518,7 +518,8 @@ def uninstallpackage():
 
 @command
 def installpackage():
-    install_package_command = ['pip', 'install', os.path.realpath('./dist/hey_helper-0.0.1-py3-none-any.whl')]
+    buildpackage()
+    install_package_command = ['pip', 'install', os.path.realpath('./dist/hey_helper-0.0.3-py3-none-any.whl')]
     _run_command(install_package_command)
 
 def welcome():
