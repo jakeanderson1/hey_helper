@@ -263,11 +263,16 @@ def restore():
     wk_dir = _go_to_working_dir()
     if not dump:
         dump = os.path.basename(sys.argv[2])
+    
+    if 'data_volume_name' in CONFIG:
+        volume_name = CONFIG['data_volume_name']
+    else:
+        volume_name = 'data'
 
     print("Restoring data in container to wk_dir {}...".format(wk_dir))
     _handle_err(_run_command(['docker', 'run', '--mount',
         'type=bind,src={},destination=/pg_restore_src'.format(wk_dir), '--mount',
-        'type=volume,src=data,destination=/pg_restore_dest', 'ubuntu', 'bash', '-c',
+        'type=volume,src={},destination=/pg_restore_dest'.format(volume_name), 'ubuntu', 'bash', '-c',
             "cd /pg_restore_dest; \
             echo '    Removing old data'; rm -R /pg_restore_dest/*; \
             ls /pg_restore_src; \
@@ -283,7 +288,6 @@ def restore():
     database_user = 'argondb'
     if 'services' in COMPOSE_FILE and 'postgres' in COMPOSE_FILE['services'] and 'environment' in COMPOSE_FILE['services']['postgres']:
         env_vars = {k.split('=')[0]: k.split('=')[1] for k in COMPOSE_FILE['services']['postgres']['environment'] if '=' in k}
-        print(env_vars)
         database_name = env_vars['POSTGRES_DB'] or 'argon'
         database_user = env_vars['POSTGRES_USER'] or 'argondb'
 
