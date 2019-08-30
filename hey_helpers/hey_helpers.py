@@ -15,6 +15,7 @@ CONFIG = {
     'default_container': 'django',
     'compose_files': ['docker-compose.DEV.yml']
 }
+COMPOSE_FILE = {}
 
 def command(_func=None, *, command_name=None, noninteractive=False):
     def decorator_command_noargs(func):
@@ -53,10 +54,28 @@ def _handle_err(cmd):
         sys.exit(1)
     return cmd
 
+
 def _get_config_file_here(filepath):
     valid_filenames = ['hey.yml', 'hey.yaml']
     filename = next((f for f in os.listdir(filepath) if f in valid_filenames), None)
     return filename
+
+
+def _get_compose_files():
+    compose_files = CONFIG.get('compose_files', ['docker-compose.DEV.yml'])
+    if type(compose_files) is not list:
+        if ';' in compose_files:
+            compose_files = compose_files.split(';')
+        else:
+            compose_files = [compose_files]
+    current_dir = os.path.realpath(os.curdir)
+    for compose_file in compose_files:
+        with open(os.path.join(current_dir, compose_file), 'r') as stream:
+            loaded_compose_file = load(stream, Loader=Loader)
+            if loaded_compose_file:
+                COMPOSE_FILE.update(loaded_compose_file)
+    return compose_files
+
 
 def _go_to_working_dir():
     this_dir = os.path.dirname(os.path.realpath(__file__))
@@ -89,12 +108,7 @@ _go_to_working_dir()
 
 def _docker_compose(command_array, compose_files=None, handle_errors=True):
     if not compose_files:
-        compose_files = CONFIG.get('compose_files', ['docker-compose.DEV.yml'])
-        if type(compose_files) is not list:
-            if ';' in compose_files:
-                compose_files = compose_files.split(';')
-            else:
-                compose_files = [compose_files]
+        compose_files = _get_compose_files()
 
     command = ['docker-compose']
     for cf in compose_files:
@@ -216,8 +230,7 @@ def get_scp_command():
 def getbackup():
     '''Download the latest prod database backup'''
     print('Checking for latest backup...')
-    # dirpath = _go_to_working_dir()
-    dirpath = "../"
+    dirpath = _go_to_working_dir()
     ssh = 'ssh'
     if os.name == 'nt':
         ssh = 'C:/Program Files/Git/usr/bin/ssh'
@@ -247,7 +260,6 @@ def restore():
     _docker_compose(['stop'])
 
     this_dir = os.path.dirname(os.path.realpath(__file__))
-    # wk_dir = os.path.join(this_dir, os.path.pardir)
     wk_dir = _go_to_working_dir()
     if not dump:
         dump = os.path.basename(sys.argv[2])
@@ -258,16 +270,29 @@ def restore():
         'type=volume,src=data,destination=/pg_restore_dest', 'ubuntu', 'bash', '-c',
             "cd /pg_restore_dest; \
             echo '    Removing old data'; rm -R /pg_restore_dest/*; \
-            echo '    Extracting backup data'; tar xf /pg_restore_src/{}".format(dump)]))
+            ls /pg_restore_src; \
+            echo '    Extracting backup data'; tar xfv /pg_restore_src/{}".format(dump)]))
 
     print('Stopping postgres...')
     _docker_compose(['up', '-d', 'postgres'])
 
     print('Cleaning up...')
     r = None
-    while '(1 row)' not in str(getattr(r, 'stdout', '')):
+    output = str(getattr(r, 'stdout', ''))
+    database_name = 'argon'
+    database_user = 'argondb'
+    if 'services' in COMPOSE_FILE and 'postgres' in COMPOSE_FILE['services'] and 'environment' in COMPOSE_FILE['services']['postgres']:
+        env_vars = {k.split('=')[0]: k.split('=')[1] for k in COMPOSE_FILE['services']['postgres']['environment'] if '=' in k}
+        print(env_vars)
+        database_name = env_vars['POSTGRES_DB'] or 'argon'
+        database_user = env_vars['POSTGRES_USER'] or 'argondb'
+
+    print("Connecting to {} with {}".format(database_name, database_user))
+    while '(1 row)' not in output:
         r = _docker_compose(['exec', 'postgres', 'bash', '-c',
-                             "psql -d argon -U argondb -c 'select 1'"], handle_errors=False)
+                             "psql -d {} -U {} -c 'select 1'".format(database_name, database_user)], handle_errors=False)
+        output = str(getattr(r, 'stdout', ''))
+        print(output)
         sleep(1)
 
     _docker_compose(['exec', '-d', 'postgres', 'bash', '-c', '''
@@ -310,6 +335,7 @@ def migrate():
     _docker_compose(['exec', CONFIG.get('default_container', 'django'), 'bash', '-c',
                      'python /code/django/manage.py migrate {}'.format(args)])
 
+
 @command
 def jsbuild():
     '''Run a webpack build'''
@@ -319,10 +345,19 @@ def jsbuild():
     _docker_compose(['exec', CONFIG.get('default_container', 'django'), 'bash', '-c',
                      'cd /code/django/js; npm run build {}'.format(args)])
 
+
 @command
 def jsserve():
     '''Run the webpack dev server'''
     _docker_compose(['exec', CONFIG.get('default_container', 'django'), 'bash', '-c', 'cd /code/django/js; npm run serve'])
+
+
+@command
+def jswatch():
+    '''Run webpack in "watch" mode, recompiling automatically on save"'''
+    _docker_compose(['exec', 'django', 'bash', '-c', 'cd /code/django/js;'
+                     './node_modules/.bin/webpack --watch --info-verbosity verbose'])
+
 
 @command
 def npm():
@@ -331,6 +366,12 @@ def npm():
         _docker_compose(['exec', CONFIG.get('default_container', 'django'), 'bash', '-c',
                          'cd /code/django/js; npm {}'.format(' '.join(sys.argv[2:]))])
 
+
+def _manage_py(command):
+    _docker_compose(['exec', 'django', 'bash', '-c', '/code/django/manage.py {}'.format(command)])
+
+
+@command
 def collectstatic():
     '''Copy all static assets to argon/static'''
     _manage_py('collectstatic --no-input')
@@ -513,13 +554,15 @@ def buildpackage():
 
 @command
 def uninstallpackage():
+    """Uninstalls the hey-helper package on this system"""
     uninstall_package_command = ['pip', 'uninstall', '-y', 'hey-helper']
     _run_command(uninstall_package_command)
 
 @command
 def installpackage():
+    """Installs the built wheel file for the hey-helper package"""
     buildpackage()
-    install_package_command = ['pip', 'install', os.path.realpath('./dist/hey_helper-0.0.3-py3-none-any.whl')]
+    install_package_command = ['pip', 'install', os.path.realpath('./dist/hey_helper-0.0.4-py3-none-any.whl')]
     _run_command(install_package_command)
 
 def welcome():
