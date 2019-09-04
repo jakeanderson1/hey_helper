@@ -136,9 +136,9 @@ def _command_match(cmd):
     else:
         print("Command not found.")
 
-def _run_command(command_array, *args, **kwargs):
+def _run_command(command_array, shell=False, *args, **kwargs):
     print('Command: ', '`', ' '.join(command_array).strip(), '`', sep='')
-    cmd = subprocess.run(command_array, stderr=subprocess.PIPE, shell=True, *args, **kwargs)
+    cmd = subprocess.run(command_array, stderr=subprocess.PIPE, shell=shell, *args, **kwargs)
     return _handle_err(cmd)
 
 @command
