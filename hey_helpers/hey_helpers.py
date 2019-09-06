@@ -372,7 +372,7 @@ def npm():
 
 
 def _manage_py(command):
-    _docker_compose(['exec', 'django', 'bash', '-c', '/code/django/manage.py {}'.format(command)])
+    _docker_compose(['exec', 'django', 'bash', '-c', 'python /code/django/manage.py {}'.format(command)])
 
 
 @command
