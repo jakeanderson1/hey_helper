@@ -16,6 +16,7 @@ CONFIG = {
     'compose_files': ['docker-compose.DEV.yml']
 }
 COMPOSE_FILE = {}
+HOOKS = {}
 
 def command(_func=None, *, command_name=None, noninteractive=False):
     def decorator_command_noargs(func):
@@ -39,7 +40,7 @@ def command(_func=None, *, command_name=None, noninteractive=False):
             value = func(*args, **kwargs)
             return value
         return wrapper_command
-    
+
     if _func is None:
         return decorator_command_noargs
     else:
@@ -76,6 +77,13 @@ def _get_compose_files():
                 COMPOSE_FILE.update(loaded_compose_file)
     return compose_files
 
+def _load_additional_helpers(current_dir):
+    import importlib.util
+    spec = importlib.util.spec_from_file_location("user_helpers", os.path.join(current_dir, 'hey_helpers.py'))
+    user_helpers = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(user_helpers)
+    COMMANDS.update(user_helpers.COMMANDS)
+    HOOKS.update(user_helpers.HOOKS)
 
 def _go_to_working_dir():
     this_dir = os.path.dirname(os.path.realpath(__file__))
@@ -96,6 +104,7 @@ def _go_to_working_dir():
             loaded_config = load(stream, Loader=Loader)
             if loaded_config:
                 CONFIG.update(loaded_config)
+                _load_additional_helpers(current_dir)
             # print(CONFIG)
         return current_dir
 
@@ -121,6 +130,7 @@ def _docker_compose(command_array, compose_files=None, handle_errors=True):
         return _handle_err(subprocess.run(command, stderr=subprocess.PIPE))
     return subprocess.run(command, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
 
+
 def _command_match(cmd):
     if cmd.isdigit() and int(cmd) < len(COMMANDS.keys()):
         COMMANDS[list(COMMANDS.keys())[int(cmd)]]()
@@ -128,7 +138,14 @@ def _command_match(cmd):
 
     matches = [c for c in all_commands.keys() if c.lower() == cmd.lower()]
     if len(matches) == 1:
+        if HOOKS.get('before__'+matches[0]):
+            HOOKS['before__'+matches[0]]()
+
         all_commands[matches[0]]()
+
+        if HOOKS.get('after__'+matches[0]):
+            HOOKS['after__'+matches[0]]()
+
         return True
     elif len(matches) > 1:
         print('Shortcut "{}" matches multiple commands:'.format(cmd))
@@ -263,7 +280,7 @@ def restore():
     wk_dir = _go_to_working_dir()
     if not dump:
         dump = os.path.basename(sys.argv[2])
-    
+
     if 'data_volume_name' in CONFIG:
         volume_name = CONFIG['data_volume_name']
     else:
@@ -456,7 +473,7 @@ def pushtogke():
     build()
     image_name = 'gcr.io/habitdb/habitdb-www'
     _pushtogke(image_name)
-    
+
     image_name = 'gcr.io/habitdb/kanbanflow_sync'
     _pushtogke(image_name)
 
@@ -497,7 +514,7 @@ def kubeexec():
     if not len(sys.argv) > 3:
         print("Error: container name and command required")
         return
-    
+
     args = sys.argv[2:]
     containername = args[0]
     exec_command = args[1:]
@@ -510,7 +527,7 @@ def kubegettags():
     if not len(sys.argv) > 2:
         print("Error: image name required")
         return
-    
+
     args = sys.argv[2:]
     image_name = args[0]
     list_tags_command = ['gcloud', 'container', 'images', 'list-tags', image_name]
@@ -545,7 +562,7 @@ def kubegetlatesttag():
     if not len(sys.argv) > 2:
         print("Error: image name required")
         return
-    
+
     args = sys.argv[2:]
     image_name = args[0]
     _kubegetlatesttag(image_name)
