@@ -39,7 +39,7 @@ def command(_func=None, *, command_name=None, noninteractive=False):
             value = func(*args, **kwargs)
             return value
         return wrapper_command
-    
+
     if _func is None:
         return decorator_command_noargs
     else:
@@ -121,12 +121,15 @@ def _docker_compose(command_array, compose_files=None, handle_errors=True):
         return _handle_err(subprocess.run(command, stderr=subprocess.PIPE))
     return subprocess.run(command, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
 
-def _command_match(cmd):
+def _command_match(cmd, short_commands=False):
     if cmd.isdigit() and int(cmd) < len(COMMANDS.keys()):
         COMMANDS[list(COMMANDS.keys())[int(cmd)]]()
         return True
 
-    matches = [c for c in all_commands.keys() if c.lower() == cmd.lower()]
+    if not short_commands:
+        matches = [c for c in all_commands.keys() if c.lower() == cmd.lower()]
+    else:
+        matches = [c for c in all_commands.keys() if c.lower().startswith(cmd.lower())]
     if len(matches) == 1:
         all_commands[matches[0]]()
         return True
@@ -263,7 +266,7 @@ def restore():
     wk_dir = _go_to_working_dir()
     if not dump:
         dump = os.path.basename(sys.argv[2])
-    
+
     if 'data_volume_name' in CONFIG:
         volume_name = CONFIG['data_volume_name']
     else:
@@ -456,7 +459,7 @@ def pushtogke():
     build()
     image_name = 'gcr.io/habitdb/habitdb-www'
     _pushtogke(image_name)
-    
+
     image_name = 'gcr.io/habitdb/kanbanflow_sync'
     _pushtogke(image_name)
 
@@ -497,7 +500,7 @@ def kubeexec():
     if not len(sys.argv) > 3:
         print("Error: container name and command required")
         return
-    
+
     args = sys.argv[2:]
     containername = args[0]
     exec_command = args[1:]
@@ -510,7 +513,7 @@ def kubegettags():
     if not len(sys.argv) > 2:
         print("Error: image name required")
         return
-    
+
     args = sys.argv[2:]
     image_name = args[0]
     list_tags_command = ['gcloud', 'container', 'images', 'list-tags', image_name]
@@ -545,7 +548,7 @@ def kubegetlatesttag():
     if not len(sys.argv) > 2:
         print("Error: image name required")
         return
-    
+
     args = sys.argv[2:]
     image_name = args[0]
     _kubegetlatesttag(image_name)
@@ -571,12 +574,14 @@ def installpackage():
 
 def welcome():
     print(r'''
- 54  __   __          HEY HELPER SCRIPTS
-     \ \ / /
-      \ V /  ___      Tips:
-      /   \ / _ \     - Alias this script to `hey` for easy running
-     / / \ \  __/     - Add one or more ; seperated files to COMPOSE_FILES
-    /_/   \_\___|     - Run any command directly with `hey <command> <args>`
+  _                _
+ | |              | |    HEY HELPER SCRIPTS
+ | |__   ___ _   _| |    Tips:
+ | '_ \ / _ \ | | | |    - Alias this script to `hey` for easy running
+ | | | |  __/ |_| |_|    - Add one or more ; seperated files to COMPOSE_FILES
+ |_| |_|\___|\__, (_)    - Run any command directly with `hey <command> <args>`
+              __/ |
+             |___/
 ''')
     for i, k in enumerate(COMMANDS.keys()):
         sep = '\t'
@@ -595,11 +600,10 @@ all_commands = dict(COMMANDS)
 all_commands.update(NONINTERACTIVE)
 
 def entrypoint():
-
     if len(sys.argv) < 2:
         welcome()
     else:
-        _command_match(sys.argv[1])
+        _command_match(sys.argv[1], CONFIG.get('short_commands', False))
 
 if __name__ == '__main__':
     entrypoint()
